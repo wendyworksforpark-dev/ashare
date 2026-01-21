@@ -5,7 +5,7 @@
 业务逻辑层，专注于指标计算和数据组装。
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import numpy as np
@@ -381,3 +381,88 @@ class KlineService:
             标的代码列表
         """
         return self.kline_repo.find_symbols_with_data(symbol_type, timeframe)
+
+    def save_klines(
+        self,
+        symbol_type: SymbolType,
+        symbol_code: str,
+        symbol_name: Optional[str],
+        timeframe: KlineTimeframe,
+        klines: list[dict],
+        calculate_indicators: bool = True,
+    ) -> int:
+        """
+        保存K线数据 (upsert)
+
+        Args:
+            symbol_type: 标的类型
+            symbol_code: 标的代码 (会自动标准化)
+            symbol_name: 标的名称
+            timeframe: 时间周期
+            klines: K线数据列表，每个包含 datetime, open, high, low, close, volume, amount
+            calculate_indicators: 是否计算 MACD 指标
+
+        Returns:
+            保存的记录数
+        """
+        from src.models import Kline
+        from src.schemas.normalized import NormalizedDateTime
+
+        if not klines:
+            return 0
+
+        # 标准化symbol_code（个股用6位代码）
+        if symbol_type == SymbolType.STOCK:
+            try:
+                symbol_code = NormalizedTicker(raw=symbol_code).raw
+            except ValueError:
+                pass
+
+        # 按时间排序
+        klines = sorted(klines, key=lambda k: k.get("datetime", ""))
+
+        # 计算 MACD
+        if calculate_indicators:
+            closes = [float(k.get("close", 0)) for k in klines]
+            macd_data = calculate_macd(closes)
+        else:
+            macd_data = {"dif": [None] * len(klines), "dea": [None] * len(klines), "macd": [None] * len(klines)}
+
+        # 准备数据，标准化日期格式
+        is_daily = timeframe == KlineTimeframe.DAY
+        records = []
+        for i, k in enumerate(klines):
+            raw_time = k.get("datetime", "")
+            # 标准化日期时间
+            try:
+                if is_daily:
+                    trade_time = NormalizedDate(value=raw_time).to_iso()
+                else:
+                    trade_time = NormalizedDateTime(value=raw_time).to_iso()
+            except ValueError:
+                trade_time = raw_time  # 保持原值
+
+            now = datetime.now(timezone.utc)
+            records.append(
+                Kline(
+                    symbol_type=symbol_type,
+                    symbol_code=symbol_code,
+                    symbol_name=symbol_name,
+                    timeframe=timeframe,
+                    trade_time=trade_time,
+                    open=float(k.get("open", 0)),
+                    high=float(k.get("high", 0)),
+                    low=float(k.get("low", 0)),
+                    close=float(k.get("close", 0)),
+                    volume=float(k.get("volume", 0)),
+                    amount=float(k.get("amount", 0)),
+                    dif=macd_data["dif"][i],
+                    dea=macd_data["dea"][i],
+                    macd=macd_data["macd"][i],
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+
+        # 使用repository保存
+        return self.kline_repo.upsert_batch(records)

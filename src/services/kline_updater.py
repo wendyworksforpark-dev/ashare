@@ -178,16 +178,16 @@ class KlineUpdater:
 
             for (ts_code, name), klines in zip(INDEX_LIST, results):
                 if klines:
-                    with KlineService(session) as service:
-                        count = service.save_klines(
-                            symbol_type=SymbolType.INDEX,
-                            symbol_code=ts_code,
-                            symbol_name=name,
-                            timeframe=KlineTimeframe.DAY,
-                            klines=klines,
-                        )
-                        total_updated += count
-                        logger.info(f"  {name}: {count} 条")
+                    service = KlineService.create_with_session(session)
+                    count = service.save_klines(
+                    symbol_type=SymbolType.INDEX,
+                    symbol_code=ts_code,
+                    symbol_name=name,
+                    timeframe=KlineTimeframe.DAY,
+                    klines=klines,
+                    )
+                    total_updated += count
+                    logger.info(f"  {name}: {count} 条")
 
             self._log_update(
                 session, "index_daily", DataUpdateStatus.COMPLETED, total_updated
@@ -259,16 +259,16 @@ class KlineUpdater:
 
             for (ts_code, name), klines in zip(INDEX_LIST, results):
                 if klines:
-                    with KlineService(session) as service:
-                        count = service.save_klines(
-                            symbol_type=SymbolType.INDEX,
-                            symbol_code=ts_code,
-                            symbol_name=name,
-                            timeframe=KlineTimeframe.MINS_30,
-                            klines=klines,
-                        )
-                        total_updated += count
-                        logger.info(f"  {name}: {count} 条")
+                    service = KlineService.create_with_session(session)
+                    count = service.save_klines(
+                        symbol_type=SymbolType.INDEX,
+                        symbol_code=ts_code,
+                        symbol_name=name,
+                        timeframe=KlineTimeframe.MINS_30,
+                        klines=klines,
+                    )
+                    total_updated += count
+                    logger.info(f"  {name}: {count} 条")
 
             self._log_update(
                 session, "index_30m", DataUpdateStatus.COMPLETED, total_updated
@@ -414,15 +414,15 @@ class KlineUpdater:
 
                 for code, name, klines in results:
                     if klines:
-                        with KlineService(session) as service:
-                            count = service.save_klines(
-                                symbol_type=SymbolType.CONCEPT,
-                                symbol_code=code,
-                                symbol_name=name,
-                                timeframe=KlineTimeframe.DAY,
-                                klines=klines,
-                            )
-                            total_updated += count
+                        service = KlineService.create_with_session(session)
+                        count = service.save_klines(
+                            symbol_type=SymbolType.CONCEPT,
+                            symbol_code=code,
+                            symbol_name=name,
+                            timeframe=KlineTimeframe.DAY,
+                            klines=klines,
+                        )
+                        total_updated += count
 
                 # 批次间延迟
                 await asyncio.sleep(0.5)
@@ -466,15 +466,15 @@ class KlineUpdater:
 
                 for code, name, klines in results:
                     if klines:
-                        with KlineService(session) as service:
-                            count = service.save_klines(
-                                symbol_type=SymbolType.CONCEPT,
-                                symbol_code=code,
-                                symbol_name=name,
-                                timeframe=KlineTimeframe.MINS_30,
-                                klines=klines,
-                            )
-                            total_updated += count
+                        service = KlineService.create_with_session(session)
+                        count = service.save_klines(
+                            symbol_type=SymbolType.CONCEPT,
+                            symbol_code=code,
+                            symbol_name=name,
+                            timeframe=KlineTimeframe.MINS_30,
+                            klines=klines,
+                        )
+                        total_updated += count
 
                 await asyncio.sleep(0.5)
 
@@ -526,7 +526,7 @@ class KlineUpdater:
 
         session = SessionLocal()
         provider = EastMoneyKlineProvider(delay=0.1)
-        kline_service = KlineService(session)
+        kline_service = KlineService.create_with_session(session)
 
         try:
             for ticker in tickers:
@@ -597,7 +597,7 @@ class KlineUpdater:
 
         session = SessionLocal()
         provider = SinaKlineProvider(delay=0.5)
-        kline_service = KlineService(session)
+        kline_service = KlineService.create_with_session(session)
 
         try:
             for ticker in tickers:
@@ -668,7 +668,7 @@ class KlineUpdater:
 
         session = SessionLocal()
         provider = EastMoneyKlineProvider(delay=0.1)
-        kline_service = KlineService(session)
+        kline_service = KlineService.create_with_session(session)
 
         try:
             # 获取所有股票代码
@@ -778,16 +778,16 @@ class KlineUpdater:
                 if 'timestamp' in daily_df.columns:
                     daily_df = daily_df.rename(columns={'timestamp': 'datetime'})
                 daily_klines = daily_df.to_dict('records')
-                with KlineService() as service:
-                    count = service.save_klines(
-                        symbol_type=SymbolType.STOCK,
-                        symbol_code=ticker,
-                        symbol_name=None,
-                        timeframe=KlineTimeframe.DAY,
-                        klines=daily_klines,
-                    )
-                    result["daily"] = count
-                    logger.info(f"{ticker} 日线更新: {count} 条")
+                service = KlineService.create_with_session(SessionLocal())
+                count = service.save_klines(
+                    symbol_type=SymbolType.STOCK,
+                    symbol_code=ticker,
+                    symbol_name=None,
+                    timeframe=KlineTimeframe.DAY,
+                    klines=daily_klines,
+                )
+                result["daily"] = count
+                logger.info(f"{ticker} 日线更新: {count} 条")
         except Exception as e:
             logger.warning(f"{ticker} 日线更新失败: {e}")
 
@@ -801,16 +801,16 @@ class KlineUpdater:
                 if 'timestamp' in mins30_df.columns:
                     mins30_df = mins30_df.rename(columns={'timestamp': 'datetime'})
                 mins30_klines = mins30_df.to_dict('records')
-                with KlineService() as service:
-                    count = service.save_klines(
-                        symbol_type=SymbolType.STOCK,
-                        symbol_code=ticker,
-                        symbol_name=None,
-                        timeframe=KlineTimeframe.MINS_30,
-                        klines=mins30_klines,
-                    )
-                    result["mins30"] = count
-                    logger.info(f"{ticker} 30分钟更新: {count} 条")
+                service = KlineService.create_with_session(SessionLocal())
+                count = service.save_klines(
+                    symbol_type=SymbolType.STOCK,
+                    symbol_code=ticker,
+                    symbol_name=None,
+                    timeframe=KlineTimeframe.MINS_30,
+                    klines=mins30_klines,
+                )
+                result["mins30"] = count
+                logger.info(f"{ticker} 30分钟更新: {count} 条")
         except Exception as e:
             logger.warning(f"{ticker} 30分钟更新失败: {e}")
 
