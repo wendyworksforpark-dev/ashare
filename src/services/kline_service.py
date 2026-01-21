@@ -1,19 +1,20 @@
 """
-统一K线数据服务
-提供统一的K线数据访问接口，支持个股、指数、概念板块
+统一K线数据服务 - 重构版本
+
+提供统一的K线数据访问接口，使用Repository模式。
+业务逻辑层，专注于指标计算和数据组装。
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 import numpy as np
-from sqlalchemy import and_, desc
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from src.database import SessionLocal
-from src.models import Kline, KlineTimeframe, SymbolType
-from src.schemas.normalized import NormalizedDate, NormalizedDateTime, NormalizedTicker
+from src.models import KlineTimeframe, SymbolType
+from src.repositories.kline_repository import KlineRepository
+from src.repositories.symbol_repository import SymbolRepository
+from src.schemas.normalized import NormalizedDate, NormalizedTicker
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -23,9 +24,20 @@ def calculate_macd(
     close_prices: list[float],
     fast_period: int = 12,
     slow_period: int = 26,
-    signal_period: int = 9
+    signal_period: int = 9,
 ) -> dict[str, list[float | None]]:
-    """计算MACD指标"""
+    """
+    计算MACD指标
+
+    Args:
+        close_prices: 收盘价列表
+        fast_period: 快线周期
+        slow_period: 慢线周期
+        signal_period: 信号线周期
+
+    Returns:
+        包含dif, dea, macd的字典
+    """
     if len(close_prices) < slow_period:
         return {
             "dif": [None] * len(close_prices),
@@ -36,11 +48,12 @@ def calculate_macd(
     closes = np.array(close_prices, dtype=float)
 
     def ema(data: np.ndarray, period: int) -> np.ndarray:
+        """计算指数移动平均"""
         result = np.zeros(len(data))
         multiplier = 2 / (period + 1)
         result[0] = data[0]
         for i in range(1, len(data)):
-            result[i] = (data[i] - result[i-1]) * multiplier + result[i-1]
+            result[i] = (data[i] - result[i - 1]) * multiplier + result[i - 1]
         return result
 
     ema_fast = ema(closes, fast_period)
@@ -57,28 +70,44 @@ def calculate_macd(
 
 
 class KlineService:
-    """统一K线数据服务"""
+    """
+    K线数据业务服务
 
-    def __init__(self, session: Optional[Session] = None):
-        self._session = session
-        self._owns_session = session is None
+    职责:
+    - 查询K线数据（委托给Repository）
+    - 计算技术指标（MACD等）
+    - 组装返回数据格式
+    """
 
-    @property
-    def session(self) -> Session:
-        if self._session is None:
-            self._session = SessionLocal()
-        return self._session
+    def __init__(
+        self,
+        kline_repo: KlineRepository,
+        symbol_repo: Optional[SymbolRepository] = None,
+    ):
+        """
+        初始化KlineService
 
-    def close(self):
-        if self._owns_session and self._session is not None:
-            self._session.close()
-            self._session = None
+        Args:
+            kline_repo: K线数据Repository
+            symbol_repo: 标的数据Repository（可选）
+        """
+        self.kline_repo = kline_repo
+        self.symbol_repo = symbol_repo
 
-    def __enter__(self):
-        return self
+    @classmethod
+    def create_with_session(cls, session: Session) -> "KlineService":
+        """
+        使用Session创建KlineService实例（工厂方法）
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
+        Args:
+            session: SQLAlchemy Session
+
+        Returns:
+            KlineService实例
+        """
+        kline_repo = KlineRepository(session)
+        symbol_repo = SymbolRepository(session)
+        return cls(kline_repo, symbol_repo)
 
     def get_klines(
         self,
@@ -111,49 +140,98 @@ class KlineService:
                 pass  # 保持原值
 
         # 标准化日期参数
+        start_datetime = None
+        end_datetime = None
+
         if start_date:
             try:
-                start_date = NormalizedDate(value=start_date).to_iso()
-            except ValueError:
-                pass
-        if end_date:
-            try:
-                end_date = NormalizedDate(value=end_date).to_iso()
+                start_datetime = datetime.fromisoformat(
+                    NormalizedDate(value=start_date).to_iso()
+                )
             except ValueError:
                 pass
 
-        query = self.session.query(Kline).filter(
-            and_(
-                Kline.symbol_type == symbol_type,
-                Kline.symbol_code == symbol_code,
-                Kline.timeframe == timeframe,
+        if end_date:
+            try:
+                end_datetime = datetime.fromisoformat(
+                    NormalizedDate(value=end_date).to_iso()
+                )
+            except ValueError:
+                pass
+
+        # 根据是否有日期范围选择不同的查询方法
+        if start_datetime and end_datetime:
+            klines = self.kline_repo.find_by_symbol_and_date_range(
+                symbol_code=symbol_code,
+                symbol_type=symbol_type,
+                timeframe=timeframe,
+                start_date=start_datetime,
+                end_date=end_datetime,
             )
-        )
+        else:
+            klines = self.kline_repo.find_by_symbol(
+                symbol_code=symbol_code,
+                symbol_type=symbol_type,
+                timeframe=timeframe,
+                limit=limit,
+            )
+            # Repository返回的是倒序，需要反转
+            klines = list(reversed(klines))
 
-        if start_date:
-            query = query.filter(Kline.trade_time >= start_date)
-        if end_date:
-            query = query.filter(Kline.trade_time <= end_date)
-
-        # 按时间降序获取最新的 limit 条，然后再按时间升序排列
-        klines = query.order_by(desc(Kline.trade_time)).limit(limit).all()
-        klines = list(reversed(klines))
-
+        # 转换为字典格式
         return [
             {
-                "datetime": k.trade_time,
+                "datetime": k.datetime.isoformat() if k.datetime else None,
                 "open": k.open,
                 "high": k.high,
                 "low": k.low,
                 "close": k.close,
                 "volume": k.volume,
                 "amount": k.amount,
-                "dif": k.dif,
-                "dea": k.dea,
-                "macd": k.macd,
             }
             for k in klines
         ]
+
+    def get_klines_with_indicators(
+        self,
+        symbol_type: SymbolType,
+        symbol_code: str,
+        timeframe: KlineTimeframe = KlineTimeframe.DAY,
+        limit: int = 120,
+        include_macd: bool = True,
+    ) -> list[dict]:
+        """
+        获取带技术指标的K线数据
+
+        Args:
+            symbol_type: 标的类型
+            symbol_code: 标的代码
+            timeframe: 时间周期
+            limit: 返回数量
+            include_macd: 是否包含MACD指标
+
+        Returns:
+            包含技术指标的K线数据列表
+        """
+        klines = self.get_klines(symbol_type, symbol_code, timeframe, limit)
+
+        if not klines:
+            return []
+
+        # 计算MACD指标
+        if include_macd:
+            close_prices = [k["close"] for k in klines if k["close"] is not None]
+            if close_prices:
+                macd_data = calculate_macd(close_prices)
+
+                # 将指标添加到K线数据中
+                for i, kline in enumerate(klines):
+                    if i < len(macd_data["dif"]):
+                        kline["dif"] = macd_data["dif"][i]
+                        kline["dea"] = macd_data["dea"][i]
+                        kline["macd"] = macd_data["macd"][i]
+
+        return klines
 
     def get_klines_with_meta(
         self,
@@ -161,24 +239,41 @@ class KlineService:
         symbol_code: str,
         timeframe: KlineTimeframe = KlineTimeframe.DAY,
         limit: int = 120,
+        include_indicators: bool = True,
     ) -> dict:
         """
         获取K线数据及元信息
 
+        Args:
+            symbol_type: 标的类型
+            symbol_code: 标的代码
+            timeframe: 时间周期
+            limit: 返回数量
+            include_indicators: 是否包含技术指标
+
         Returns:
             包含 symbol_type, symbol_code, symbol_name, timeframe, count, klines 的字典
         """
-        klines = self.get_klines(symbol_type, symbol_code, timeframe, limit)
-
-        # 获取名称
-        first_kline = self.session.query(Kline).filter(
-            and_(
-                Kline.symbol_type == symbol_type,
-                Kline.symbol_code == symbol_code,
+        # 获取K线数据
+        if include_indicators:
+            klines = self.get_klines_with_indicators(
+                symbol_type, symbol_code, timeframe, limit
             )
-        ).first()
+        else:
+            klines = self.get_klines(symbol_type, symbol_code, timeframe, limit)
 
-        symbol_name = first_kline.symbol_name if first_kline else None
+        # 获取标的名称
+        symbol_name = None
+        if klines:
+            # 从第一条K线获取名称
+            first_kline = self.kline_repo.find_by_symbol(
+                symbol_code=symbol_code,
+                symbol_type=symbol_type,
+                timeframe=timeframe,
+                limit=1,
+            )
+            if first_kline:
+                symbol_name = first_kline[0].symbol_name
 
         return {
             "symbol_type": symbol_type.value,
@@ -189,166 +284,100 @@ class KlineService:
             "klines": klines,
         }
 
+    def get_latest_kline(
+        self,
+        symbol_type: SymbolType,
+        symbol_code: str,
+        timeframe: KlineTimeframe = KlineTimeframe.DAY,
+    ) -> Optional[dict]:
+        """
+        获取最新的K线数据
+
+        Args:
+            symbol_type: 标的类型
+            symbol_code: 标的代码
+            timeframe: 时间周期
+
+        Returns:
+            最新K线数据字典或None
+        """
+        kline = self.kline_repo.find_latest_by_symbol(
+            symbol_code=symbol_code,
+            symbol_type=symbol_type,
+            timeframe=timeframe,
+        )
+
+        if not kline:
+            return None
+
+        return {
+            "datetime": kline.datetime.isoformat() if kline.datetime else None,
+            "open": kline.open,
+            "high": kline.high,
+            "low": kline.low,
+            "close": kline.close,
+            "volume": kline.volume,
+            "amount": kline.amount,
+        }
+
     def get_latest_trade_time(
         self,
         symbol_type: SymbolType,
         symbol_code: str,
         timeframe: KlineTimeframe = KlineTimeframe.DAY,
     ) -> Optional[str]:
-        """获取最新K线时间"""
-        kline = self.session.query(Kline).filter(
-            and_(
-                Kline.symbol_type == symbol_type,
-                Kline.symbol_code == symbol_code,
-                Kline.timeframe == timeframe,
-            )
-        ).order_by(desc(Kline.trade_time)).first()
+        """
+        获取最新K线时间
 
-        return kline.trade_time if kline else None
+        Args:
+            symbol_type: 标的类型
+            symbol_code: 标的代码
+            timeframe: 时间周期
 
-    def save_klines(
+        Returns:
+            最新交易时间的ISO字符串或None
+        """
+        kline = self.kline_repo.find_latest_by_symbol(
+            symbol_code, symbol_type, timeframe
+        )
+
+        if kline and kline.datetime:
+            return kline.datetime.isoformat()
+
+        return None
+
+    def get_klines_count(
         self,
         symbol_type: SymbolType,
         symbol_code: str,
-        symbol_name: Optional[str],
-        timeframe: KlineTimeframe,
-        klines: list[dict],
-        calculate_indicators: bool = True,
+        timeframe: KlineTimeframe = KlineTimeframe.DAY,
     ) -> int:
         """
-        保存K线数据 (upsert)
+        获取K线数据数量
 
         Args:
             symbol_type: 标的类型
-            symbol_code: 标的代码 (会自动标准化)
-            symbol_name: 标的名称
+            symbol_code: 标的代码
             timeframe: 时间周期
-            klines: K线数据列表，每个包含 datetime, open, high, low, close, volume, amount
-            calculate_indicators: 是否计算 MACD 指标
 
         Returns:
-            保存的记录数
+            K线数量
         """
-        if not klines:
-            return 0
+        return self.kline_repo.count_by_symbol(symbol_code, symbol_type, timeframe)
 
-        # 标准化symbol_code（个股用6位代码）
-        if symbol_type == SymbolType.STOCK:
-            try:
-                symbol_code = NormalizedTicker(raw=symbol_code).raw
-            except ValueError:
-                pass
-
-        # 按时间排序
-        klines = sorted(klines, key=lambda k: k.get("datetime", ""))
-
-        # 计算 MACD
-        if calculate_indicators:
-            closes = [float(k.get("close", 0)) for k in klines]
-            macd_data = calculate_macd(closes)
-        else:
-            macd_data = {"dif": [None] * len(klines), "dea": [None] * len(klines), "macd": [None] * len(klines)}
-
-        # 准备数据，标准化日期格式
-        is_daily = timeframe == KlineTimeframe.DAY
-        records = []
-        for i, k in enumerate(klines):
-            raw_time = k.get("datetime", "")
-            # 标准化日期时间
-            try:
-                if is_daily:
-                    trade_time = NormalizedDate(value=raw_time).to_iso()
-                else:
-                    trade_time = NormalizedDateTime(value=raw_time).to_iso()
-            except ValueError:
-                trade_time = raw_time  # 保持原值
-
-            records.append({
-                "symbol_type": symbol_type,
-                "symbol_code": symbol_code,
-                "symbol_name": symbol_name,
-                "timeframe": timeframe,
-                "trade_time": trade_time,
-                "open": float(k.get("open", 0)),
-                "high": float(k.get("high", 0)),
-                "low": float(k.get("low", 0)),
-                "close": float(k.get("close", 0)),
-                "volume": float(k.get("volume", 0)),
-                "amount": float(k.get("amount", 0)),
-                "dif": k.get("dif") or macd_data["dif"][i],
-                "dea": k.get("dea") or macd_data["dea"][i],
-                "macd": k.get("macd") or macd_data["macd"][i],
-            })
-
-        # 批量 upsert
-        stmt = sqlite_insert(Kline).values(records)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["symbol_type", "symbol_code", "timeframe", "trade_time"],
-            set_={
-                "open": stmt.excluded.open,
-                "high": stmt.excluded.high,
-                "low": stmt.excluded.low,
-                "close": stmt.excluded.close,
-                "volume": stmt.excluded.volume,
-                "amount": stmt.excluded.amount,
-                "dif": stmt.excluded.dif,
-                "dea": stmt.excluded.dea,
-                "macd": stmt.excluded.macd,
-                "symbol_name": stmt.excluded.symbol_name,
-                "updated_at": datetime.now(timezone.utc),
-            }
-        )
-        self.session.execute(stmt)
-        self.session.commit()
-
-        return len(records)
-
-    def delete_old_klines(
+    def get_symbols_with_kline_data(
         self,
         symbol_type: SymbolType,
-        timeframe: KlineTimeframe,
-        before_date: str,
-    ) -> int:
+        timeframe: KlineTimeframe = KlineTimeframe.DAY,
+    ) -> list[str]:
         """
-        删除旧的K线数据
+        获取有K线数据的标的列表
 
         Args:
             symbol_type: 标的类型
             timeframe: 时间周期
-            before_date: 删除此日期之前的数据
 
         Returns:
-            删除的记录数
+            标的代码列表
         """
-        result = self.session.query(Kline).filter(
-            and_(
-                Kline.symbol_type == symbol_type,
-                Kline.timeframe == timeframe,
-                Kline.trade_time < before_date,
-            )
-        ).delete()
-
-        self.session.commit()
-        return result
-
-
-# 便捷函数
-def get_stock_klines(symbol_code: str, timeframe: str = "day", limit: int = 120) -> dict:
-    """获取个股K线"""
-    tf = KlineTimeframe.DAY if timeframe == "day" else KlineTimeframe.MINS_30
-    with KlineService() as service:
-        return service.get_klines_with_meta(SymbolType.STOCK, symbol_code, tf, limit)
-
-
-def get_index_klines(symbol_code: str, timeframe: str = "day", limit: int = 120) -> dict:
-    """获取指数K线"""
-    tf = KlineTimeframe.DAY if timeframe == "day" else KlineTimeframe.MINS_30
-    with KlineService() as service:
-        return service.get_klines_with_meta(SymbolType.INDEX, symbol_code, tf, limit)
-
-
-def get_concept_klines(symbol_code: str, timeframe: str = "day", limit: int = 120) -> dict:
-    """获取概念K线"""
-    tf = KlineTimeframe.DAY if timeframe == "day" else KlineTimeframe.MINS_30
-    with KlineService() as service:
-        return service.get_klines_with_meta(SymbolType.CONCEPT, symbol_code, tf, limit)
+        return self.kline_repo.find_symbols_with_data(symbol_type, timeframe)
