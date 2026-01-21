@@ -353,7 +353,7 @@ class Kline(Base):
     )
 
     # K线数据
-    trade_time: Mapped[str] = mapped_column(String(32), index=True)  # ISO格式: 'YYYY-MM-DD' 或 'YYYY-MM-DD HH:MM:SS'
+    trade_time: Mapped[str] = mapped_column(String(32))  # ISO格式: 'YYYY-MM-DD' 或 'YYYY-MM-DD HH:MM:SS'
     open: Mapped[float] = mapped_column(Float)
     high: Mapped[float] = mapped_column(Float)
     low: Mapped[float] = mapped_column(Float)

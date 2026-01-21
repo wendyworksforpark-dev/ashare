@@ -84,14 +84,18 @@ class KlineRepository(BaseRepository[Kline]):
         Returns:
             K线数据列表（按时间正序）
         """
+        # Convert datetime to ISO string format for comparison
+        start_str = start_date.strftime("%Y-%m-%d")
+        end_str = end_date.strftime("%Y-%m-%d")
+
         stmt = (
             select(Kline)
             .filter(
                 Kline.symbol_code == symbol_code,
                 Kline.symbol_type == symbol_type,
                 Kline.timeframe == timeframe,
-                Kline.trade_time >= start_date,
-                Kline.trade_time <= end_date,
+                Kline.trade_time >= start_str,
+                Kline.trade_time <= end_str,
             )
             .order_by(Kline.trade_time)
         )
@@ -280,13 +284,17 @@ class KlineRepository(BaseRepository[Kline]):
         Returns:
             删除的记录数
         """
+        # Convert datetime to ISO string format for comparison
+        start_str = start_date.strftime("%Y-%m-%d")
+        end_str = end_date.strftime("%Y-%m-%d")
+
         stmt = delete(Kline).where(
             and_(
                 Kline.symbol_code == symbol_code,
                 Kline.symbol_type == symbol_type,
                 Kline.timeframe == timeframe,
-                Kline.trade_time >= start_date,
-                Kline.trade_time <= end_date,
+                Kline.trade_time >= start_str,
+                Kline.trade_time <= end_str,
             )
         )
 
