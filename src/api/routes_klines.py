@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from src.database import SessionLocal
+from src.api.dependencies import get_db
 from src.models import KlineTimeframe, SymbolType
 from src.services.kline_service import KlineService
 from src.utils.logging import get_logger
@@ -18,20 +18,6 @@ logger = get_logger(__name__)
 
 
 # ==================== 依赖注入 ====================
-
-
-def get_db() -> Session:
-    """
-    获取数据库Session（依赖注入）
-
-    Yields:
-        SQLAlchemy Session
-    """
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def get_kline_service(db: Session = Depends(get_db)) -> KlineService:
