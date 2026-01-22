@@ -174,16 +174,32 @@ class SomeService:
 - `1db7a51` - Phase 1 完成: Service层重构使用Repository模式
 - `2d09b8b` - refactor: introduce Repository pattern for data access layer
 
+## GitHub Issues 追踪
+
+已创建 GitHub Issues 用于追踪重构进度：
+
+- **总览**: [#1 Repository 模式架构重构总览](https://github.com/zinan92/ashare/issues/1)
+
+**待完成的子任务**:
+- [#2 DataConsistencyValidator 重构](https://github.com/zinan92/ashare/issues/2) - **高优先级**
+- [#3 KlineScheduler 重构](https://github.com/zinan92/ashare/issues/3) - 中优先级
+- [#4 ScreenshotService 重构](https://github.com/zinan92/ashare/issues/4) - 中优先级
+- [#5 SimulatedService 重构](https://github.com/zinan92/ashare/issues/5) - 低优先级
+
 ## 总结
 
-✅ **已完成**:
+✅ **已完成** (5/9 = 56%):
 - Repository 层架构完整搭建（4个仓储类）
-- 4个核心服务完成重构
-- 完整的单元测试覆盖
+- 5个核心服务完成重构
+  - KlineService, KlineUpdater
+  - BoardMappingService, TushareBoardService
+  - MarketDataService ✨ 最新完成
+- 完整的单元测试覆盖（50+ 测试用例）
 - 向后兼容设计
 
-⏳ **待完成**:
-- 4个服务文件待评估重构（约1600行代码）
-- 可根据业务优先级逐步推进
+⏳ **待完成** (4/9 = 44%):
+- 4个服务文件待重构（约1672行代码）
+- 已创建 GitHub Issues 追踪进度
+- 按优先级逐步推进
 
-当前重构已经建立了坚实的基础架构，后续服务可以按照统一模式逐步迁移。
+当前重构已经建立了坚实的基础架构，后续服务可以按照统一模式逐步迁移。使用 GitHub Issues 可以更好地追踪进度和协作。
