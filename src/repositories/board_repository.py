@@ -180,17 +180,22 @@ class BoardRepository(BaseRepository[BoardMapping]):
             {
                 "ts_code": ind.ts_code,
                 "trade_date": ind.trade_date,
-                "name": ind.name,
+                "industry": ind.industry,  # 修正：使用 industry 而不是 name
                 "close": ind.close,
                 "pct_change": ind.pct_change,
-                "volume": ind.volume,
-                "amount": ind.amount,
-                "net_mf_amount": ind.net_mf_amount,
-                "net_mf_volume": ind.net_mf_volume,
-                "pe_ttm": ind.pe_ttm,
-                "pb_mrq": ind.pb_mrq,
-                "total_mv": ind.total_mv,
-                "updated_at": ind.updated_at,
+                "company_num": ind.company_num,  # 必需字段
+                "up_count": getattr(ind, "up_count", None),
+                "down_count": getattr(ind, "down_count", None),
+                "lead_stock": getattr(ind, "lead_stock", None),
+                "lead_stock_code": getattr(ind, "lead_stock_code", None),
+                "pct_change_stock": getattr(ind, "pct_change_stock", None),
+                "close_price": getattr(ind, "close_price", None),
+                "net_buy_amount": getattr(ind, "net_buy_amount", None),
+                "net_sell_amount": getattr(ind, "net_sell_amount", None),
+                "net_amount": getattr(ind, "net_amount", None),
+                "industry_pe": getattr(ind, "industry_pe", None),
+                "pe_median": getattr(ind, "pe_median", None),
+                "total_mv": getattr(ind, "total_mv", None),
             }
             for ind in industry_dailies
         ]
@@ -199,17 +204,22 @@ class BoardRepository(BaseRepository[BoardMapping]):
         stmt = stmt.on_conflict_do_update(
             index_elements=["ts_code", "trade_date"],
             set_={
-                "name": stmt.excluded.name,
+                "industry": stmt.excluded.industry,  # 修正字段名
                 "close": stmt.excluded.close,
                 "pct_change": stmt.excluded.pct_change,
-                "volume": stmt.excluded.volume,
-                "amount": stmt.excluded.amount,
-                "net_mf_amount": stmt.excluded.net_mf_amount,
-                "net_mf_volume": stmt.excluded.net_mf_volume,
-                "pe_ttm": stmt.excluded.pe_ttm,
-                "pb_mrq": stmt.excluded.pb_mrq,
+                "company_num": stmt.excluded.company_num,
+                "up_count": stmt.excluded.up_count,
+                "down_count": stmt.excluded.down_count,
+                "lead_stock": stmt.excluded.lead_stock,
+                "lead_stock_code": stmt.excluded.lead_stock_code,
+                "pct_change_stock": stmt.excluded.pct_change_stock,
+                "close_price": stmt.excluded.close_price,
+                "net_buy_amount": stmt.excluded.net_buy_amount,
+                "net_sell_amount": stmt.excluded.net_sell_amount,
+                "net_amount": stmt.excluded.net_amount,
+                "industry_pe": stmt.excluded.industry_pe,
+                "pe_median": stmt.excluded.pe_median,
                 "total_mv": stmt.excluded.total_mv,
-                "updated_at": stmt.excluded.updated_at,
             },
         )
 
@@ -298,24 +308,30 @@ class BoardRepository(BaseRepository[BoardMapping]):
         if not concept_dailies:
             return 0
 
-        concept_dicts = [
-            {
+        from datetime import datetime
+
+        concept_dicts = []
+        for con in concept_dailies:
+            # Ensure timestamps are always set
+            created_at = getattr(con, "created_at", None) or datetime.utcnow()
+            updated_at = getattr(con, "updated_at", None) or datetime.utcnow()
+
+            concept_dicts.append({
                 "code": con.code,
                 "trade_date": con.trade_date,
                 "name": con.name,
                 "close": con.close,
                 "pct_change": con.pct_change,
-                "volume": con.volume,
-                "amount": con.amount,
-                "leader_symbol": con.leader_symbol,
-                "leader_name": con.leader_name,
-                "leader_pct_change": con.leader_pct_change,
-                "up_count": con.up_count,
-                "down_count": con.down_count,
-                "updated_at": con.updated_at,
-            }
-            for con in concept_dailies
-        ]
+                "volume": getattr(con, "volume", None),
+                "amount": getattr(con, "amount", None),
+                "leader_symbol": getattr(con, "leader_symbol", None),
+                "leader_name": getattr(con, "leader_name", None),
+                "leader_pct_change": getattr(con, "leader_pct_change", None),
+                "up_count": getattr(con, "up_count", None),
+                "down_count": getattr(con, "down_count", None),
+                "created_at": created_at,
+                "updated_at": updated_at,
+            })
 
         stmt = sqlite_insert(ConceptDaily).values(concept_dicts)
         stmt = stmt.on_conflict_do_update(
