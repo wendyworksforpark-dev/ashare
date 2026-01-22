@@ -3,10 +3,11 @@
 带懒加载功能：数据库无数据或过期时自动从API获取并保存
 """
 from datetime import datetime, time, timedelta
-from fastapi import APIRouter, HTTPException, Query, Path
+from fastapi import APIRouter, Depends, HTTPException, Query, Path
+from sqlalchemy.orm import Session
 from typing import Annotated, Optional
 
-from src.database import SessionLocal
+from src.api.dependencies import get_db
 from src.models import KlineTimeframe, SymbolType, Timeframe, TradeCalendar
 from src.schemas import CandleBatchResponse, CandlePoint
 from src.services.kline_service import KlineService
@@ -31,25 +32,24 @@ RESPONSE_TIMEFRAME_MAP = {
 
 # ==================== 懒加载辅助函数 ====================
 
-def _get_latest_trade_date() -> Optional[str]:
+def _get_latest_trade_date(db: Session) -> Optional[str]:
     """
     获取最近一个交易日的日期 (YYYY-MM-DD)
     从 trade_calendar 表查询
-    """
-    session = SessionLocal()
-    try:
-        today = datetime.now().strftime("%Y-%m-%d")
-        # 查找今天或之前最近的交易日
-        cal = session.query(TradeCalendar).filter(
-            TradeCalendar.date <= today,
-            TradeCalendar.is_trading_day == True
-        ).order_by(TradeCalendar.date.desc()).first()
 
-        if cal:
-            return cal.date
-        return None
-    finally:
-        session.close()
+    Args:
+        db: 数据库会话
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+    # 查找今天或之前最近的交易日
+    cal = db.query(TradeCalendar).filter(
+        TradeCalendar.date <= today,
+        TradeCalendar.is_trading_day == True
+    ).order_by(TradeCalendar.date.desc()).first()
+
+    if cal:
+        return cal.date
+    return None
 
 
 def _is_trading_time() -> bool:
@@ -70,6 +70,7 @@ def _is_trading_time() -> bool:
 
 
 def _is_data_stale(
+    db: Session,
     latest_time: Optional[str],
     timeframe: str,
 ) -> bool:
@@ -77,6 +78,7 @@ def _is_data_stale(
     判断数据是否过期需要更新
 
     Args:
+        db: 数据库会话
         latest_time: 数据库中最新数据的时间 (日线: YYYY-MM-DD, 30m: YYYY-MM-DD HH:MM:SS)
         timeframe: 时间周期 (day/30m)
 
@@ -90,7 +92,7 @@ def _is_data_stale(
 
     if timeframe == "day":
         # 日线：检查是否是最近交易日的数据
-        latest_trade_date = _get_latest_trade_date()
+        latest_trade_date = _get_latest_trade_date(db)
         if latest_trade_date is None:
             return False  # 无法判断，不更新
 
@@ -106,15 +108,11 @@ def _is_data_stale(
         today = now.strftime("%Y-%m-%d")
         if data_date < today and now.time() > time(15, 30):
             # 检查今天是否是交易日
-            session = SessionLocal()
-            try:
-                cal = session.query(TradeCalendar).filter(
-                    TradeCalendar.date == today
-                ).first()
-                if cal and cal.is_trading_day:
-                    return True
-            finally:
-                session.close()
+            cal = db.query(TradeCalendar).filter(
+                TradeCalendar.date == today
+            ).first()
+            if cal and cal.is_trading_day:
+                return True
 
         return False
 
@@ -122,7 +120,7 @@ def _is_data_stale(
         # 30分钟线：如果在交易时间内，检查数据是否超过35分钟
         if not _is_trading_time():
             # 非交易时间，检查是否有最近交易日的收盘数据
-            latest_trade_date = _get_latest_trade_date()
+            latest_trade_date = _get_latest_trade_date(db)
             if latest_trade_date:
                 expected_last_time = f"{latest_trade_date} 15:00:00"
                 if latest_time < expected_last_time:
@@ -141,6 +139,7 @@ def _is_data_stale(
 
 
 def _fetch_and_save_klines(
+    db: Session,
     ticker: str,
     timeframe: str,
     limit: int = 120,
@@ -149,6 +148,7 @@ def _fetch_and_save_klines(
     从API获取K线数据并保存到数据库
 
     Args:
+        db: 数据库会话
         ticker: 6位股票代码
         timeframe: 时间周期 (day/30m)
         limit: 获取数量
@@ -196,25 +196,22 @@ def _fetch_and_save_klines(
         # 保存到数据库
         kline_timeframe = KlineTimeframe.DAY if timeframe == "day" else KlineTimeframe.MINS_30
 
-        session = SessionLocal()
-        try:
-            service = KlineService.create_with_session(session)
-            count = service.save_klines(
-                symbol_type=SymbolType.STOCK,
-                symbol_code=ticker,
-                symbol_name=None,
-                timeframe=kline_timeframe,
-                klines=klines,
-            )
-            session.commit()
-        finally:
-            session.close()
+        service = KlineService.create_with_session(db)
+        count = service.save_klines(
+            symbol_type=SymbolType.STOCK,
+            symbol_code=ticker,
+            symbol_name=None,
+            timeframe=kline_timeframe,
+            klines=klines,
+        )
+        db.commit()
 
         logger.info(f"懒加载: {ticker} {timeframe} 保存 {count} 条数据")
         return count
 
     except Exception as e:
         logger.error(f"懒加载失败: {ticker} {timeframe} - {e}")
+        db.rollback()
         return 0
 
 
@@ -227,6 +224,7 @@ def get_candles(
     )],
     timeframe: str = Query("day", description="Timeframe: day/30m"),
     limit: int = Query(120, ge=1, le=500, description="Number of candles to return"),
+    db: Session = Depends(get_db),
 ) -> CandleBatchResponse:
     """
     Return most recent candles for the ticker/timeframe.
@@ -240,6 +238,7 @@ def get_candles(
         ticker: Stock code (e.g., 000001, 600519, or with suffix like 002402.SZ)
         timeframe: Time period (day/30m)
         limit: Number of candles to return
+        db: 数据库会话（依赖注入）
 
     Returns:
         CandleBatchResponse containing historical candles
@@ -255,34 +254,25 @@ def get_candles(
     response_timeframe = RESPONSE_TIMEFRAME_MAP.get(timeframe, Timeframe.DAY)
 
     # Step 1: 检查数据库中的最新数据时间
-    session = SessionLocal()
-    try:
-        service = KlineService.create_with_session(session)
-        latest_time = service.get_latest_trade_time(
-            symbol_type=SymbolType.STOCK,
-            symbol_code=ticker_code,
-            timeframe=kline_timeframe,
-        )
-    finally:
-        session.close()
+    service = KlineService.create_with_session(db)
+    latest_time = service.get_latest_trade_time(
+        symbol_type=SymbolType.STOCK,
+        symbol_code=ticker_code,
+        timeframe=kline_timeframe,
+    )
 
     # Step 2: 判断是否需要懒加载更新
-    if _is_data_stale(latest_time, timeframe):
+    if _is_data_stale(db, latest_time, timeframe):
         logger.info(f"数据过期或不存在: {ticker_code} {timeframe}, latest={latest_time}")
-        _fetch_and_save_klines(ticker_code, timeframe, limit=limit)
+        _fetch_and_save_klines(db, ticker_code, timeframe, limit=limit)
 
     # Step 3: 从数据库读取数据
-    session = SessionLocal()
-    try:
-        service = KlineService.create_with_session(session)
-        klines = service.get_klines(
-            symbol_type=SymbolType.STOCK,
-            symbol_code=ticker_code,
-            timeframe=kline_timeframe,
-            limit=limit,
-        )
-    finally:
-        session.close()
+    klines = service.get_klines(
+        symbol_type=SymbolType.STOCK,
+        symbol_code=ticker_code,
+        timeframe=kline_timeframe,
+        limit=limit,
+    )
 
     if not klines:
         raise HTTPException(
