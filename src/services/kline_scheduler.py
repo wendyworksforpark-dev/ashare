@@ -1,6 +1,11 @@
 """
 K线数据定时调度器
 使用 APScheduler 定时执行K线数据更新任务
+
+重构说明:
+- 使用 Repository 模式替代 SessionLocal()
+- 支持依赖注入用于测试
+- 向后兼容：无参数调用时自动创建 session
 """
 
 import asyncio
@@ -9,6 +14,7 @@ from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from sqlalchemy.orm import Session
 
 from src.database import SessionLocal
 from src.models import TradeCalendar
@@ -20,15 +26,51 @@ logger = get_logger(__name__)
 
 
 class KlineScheduler:
-    """K线数据定时调度器"""
+    """
+    K线数据定时调度器
 
-    def __init__(self):
+    重构后支持:
+    - 依赖注入 Session（用于测试）
+    - 向后兼容：无参数调用时自动创建 session
+    """
+
+    def __init__(self, session: Optional[Session] = None):
+        """
+        初始化调度器
+
+        Args:
+            session: 数据库会话（可选，用于依赖注入）
+        """
         self.scheduler = AsyncIOScheduler()
-        # 初始化时创建session和repositories
-        self.session = SessionLocal()
+
+        # 支持两种初始化方式：
+        # 1. 注入现有的 session（推荐，用于测试）
+        # 2. 自动创建 session（向后兼容）
+        if session:
+            self.session = session
+            self._owns_session = False
+        else:
+            self.session = SessionLocal()
+            self._owns_session = True
+
+        # 使用工厂方法创建服务
         self.updater = KlineUpdater.create_with_session(self.session)
         self.validator = DataConsistencyValidator.create_with_session(self.session)
         self._is_running = False
+
+    @classmethod
+    def create_with_session(cls, session: Session) -> "KlineScheduler":
+        """使用现有session创建调度器的工厂方法"""
+        return cls(session=session)
+
+    def __del__(self):
+        """确保session在对象销毁时关闭"""
+        if (
+            hasattr(self, "_owns_session")
+            and self._owns_session
+            and hasattr(self, "session")
+        ):
+            self.session.close()
 
     def is_trading_day(self, date: datetime = None) -> bool:
         """
@@ -45,20 +87,17 @@ class KlineScheduler:
 
         trade_date = date.strftime("%Y-%m-%d")
 
-        session = SessionLocal()
-        try:
-            cal = (
-                session.query(TradeCalendar)
-                .filter(TradeCalendar.date == trade_date)
-                .first()
-            )
-            if cal:
-                return cal.is_trading_day
-            else:
-                # 如果没有数据，按周末判断
-                return date.weekday() < 5
-        finally:
-            session.close()
+        # 使用实例的 session 而不是创建新的
+        cal = (
+            self.session.query(TradeCalendar)
+            .filter(TradeCalendar.date == trade_date)
+            .first()
+        )
+        if cal:
+            return cal.is_trading_day
+        else:
+            # 如果没有数据，按周末判断
+            return date.weekday() < 5
 
     def is_trading_time(self, dt: datetime = None) -> bool:
         """
