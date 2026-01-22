@@ -224,7 +224,7 @@ export function ConceptDetailView({ conceptName, conceptCode, maConfig, onMAConf
         <span className="concept-detail__code">代码: {conceptCode}</span>
         <span className="concept-detail__count">共 {conceptStocks.total} 只成分股</span>
         <div className="concept-detail__ma-buttons">
-          {(["ma5", "ma10", "ma20", "ma50"] as const).map((key) => (
+          {(["ma5", "ma10", "ma20", "ma30", "ma50"] as const).map((key) => (
             <button
               key={key}
               className={`watchlist-header__ma-btn ${maConfig[key] ? "watchlist-header__ma-btn--active" : ""}`}

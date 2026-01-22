@@ -470,7 +470,7 @@ export function WatchlistView({ maConfig, onMAConfigChange, onPortfolioClick }: 
             管理赛道
           </button>
           <div className="watchlist-header__ma-buttons">
-            {(["ma5", "ma10", "ma20", "ma50"] as const).map((key) => (
+            {(["ma5", "ma10", "ma20", "ma30", "ma50"] as const).map((key) => (
               <button
                 key={key}
                 className={`watchlist-header__ma-btn ${maConfig[key] ? "watchlist-header__ma-btn--active" : ""}`}

@@ -7,6 +7,7 @@ export interface MAConfig {
   ma5: boolean;
   ma10: boolean;
   ma20: boolean;
+  ma30: boolean;
   ma50: boolean;
 }
 
@@ -15,6 +16,7 @@ export const MA_COLORS = {
   ma5: "#ffd064",   // 黄色
   ma10: "#5fb0ff",  // 蓝色
   ma20: "#a98bff",  // 紫色
+  ma30: "#ff6b6b",  // 红色
   ma50: "#ff8ba7",  // 粉色
 } as const;
 
@@ -23,6 +25,7 @@ export const MA_LABELS = {
   ma5: "MA5",
   ma10: "MA10",
   ma20: "MA20",
+  ma30: "MA30",
   ma50: "MA50",
 } as const;
 
@@ -41,6 +44,7 @@ export const DEFAULT_MA_CONFIG: MAConfig = {
   ma5: true,
   ma10: true,
   ma20: true,
+  ma30: true,
   ma50: true,
 };
 
@@ -52,7 +56,7 @@ export const DEFAULT_CHART_CONFIG: ChartConfig = {
 
 // 辅助函数：检查是否有任何均线启用
 export function hasAnyMAEnabled(config: MAConfig): boolean {
-  return config.ma5 || config.ma10 || config.ma20 || config.ma50;
+  return config.ma5 || config.ma10 || config.ma20 || config.ma30 || config.ma50;
 }
 
 // 辅助函数：获取启用的均线列表

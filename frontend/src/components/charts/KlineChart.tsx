@@ -91,7 +91,7 @@ export function KlineChart({
   height = 400,
   showVolume = true,
   showMACD = true,
-  maConfig = { ma5: true, ma10: true, ma20: false, ma50: false },
+  maConfig = { ma5: true, ma10: true, ma20: false, ma30: false, ma50: false },
   title,
   backgroundColor = "#161b2b",
   compact = false,
@@ -103,6 +103,7 @@ export function KlineChart({
     ma5?: ISeriesApi<"Line">;
     ma10?: ISeriesApi<"Line">;
     ma20?: ISeriesApi<"Line">;
+    ma30?: ISeriesApi<"Line">;
     ma50?: ISeriesApi<"Line">;
     volume?: ISeriesApi<"Histogram">;
     volumeMa5?: ISeriesApi<"Line">;
@@ -219,6 +220,12 @@ export function KlineChart({
         priceLineVisible: false,
         lastValueVisible: false,
       });
+      const ma30Series = chart.addSeries(LineSeries, {
+        color: MA_COLORS.ma30,
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
       const ma50Series = chart.addSeries(LineSeries, {
         color: MA_COLORS.ma50,
         lineWidth: 1,
@@ -283,6 +290,7 @@ export function KlineChart({
         ma5: ma5Series,
         ma10: ma10Series,
         ma20: ma20Series,
+        ma30: ma30Series,
         ma50: ma50Series,
         volume: volumeSeries,
         volumeMa5: volumeMa5Series,
@@ -349,11 +357,13 @@ export function KlineChart({
     const ma5Values = calculateMA(closes, 5);
     const ma10Values = calculateMA(closes, 10);
     const ma20Values = calculateMA(closes, 20);
+    const ma30Values = calculateMA(closes, 30);
     const ma50Values = calculateMA(closes, 50);
 
     if (s.ma5) s.ma5.setData(maConfig.ma5 ? buildLineData(ma5Values) : []);
     if (s.ma10) s.ma10.setData(maConfig.ma10 ? buildLineData(ma10Values) : []);
     if (s.ma20) s.ma20.setData(maConfig.ma20 ? buildLineData(ma20Values) : []);
+    if (s.ma30) s.ma30.setData(maConfig.ma30 ? buildLineData(ma30Values) : []);
     if (s.ma50) s.ma50.setData(maConfig.ma50 ? buildLineData(ma50Values) : []);
 
     // 成交量数据

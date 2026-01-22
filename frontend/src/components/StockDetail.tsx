@@ -217,7 +217,7 @@ export function StockDetail({ ticker, maConfig, onMAConfigChange, klineLimit = 1
       {/* 控制面板 */}
       <div className="stock-detail__controls">
         <div className="stock-detail__ma-buttons">
-          {(["ma5", "ma10", "ma20", "ma50"] as const).map((key) => (
+          {(["ma5", "ma10", "ma20", "ma30", "ma50"] as const).map((key) => (
             <button
               key={key}
               className={`stock-detail__ma-btn ${maConfig[key] ? "stock-detail__ma-btn--active" : ""}`}
