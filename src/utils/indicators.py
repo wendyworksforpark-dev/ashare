@@ -6,6 +6,38 @@
 import numpy as np
 
 
+def calculate_ma(prices: list[float], period: int) -> list[float]:
+    """
+    计算简单移动平均线 (Simple Moving Average)
+
+    Args:
+        prices: 价格列表
+        period: MA周期
+
+    Returns:
+        MA值列表,长度与输入相同
+
+    Example:
+        >>> prices = [10, 11, 12, 13, 14]
+        >>> calculate_ma(prices, 3)
+        [10.0, 10.5, 11.0, 12.0, 13.0]
+    """
+    if len(prices) < period:
+        # 数据不足时使用累积平均
+        return [sum(prices[:i+1]) / (i+1) for i in range(len(prices))]
+
+    result = []
+    for i in range(len(prices)):
+        if i < period - 1:
+            # 前期数据不足,使用累积平均
+            result.append(sum(prices[:i+1]) / (i+1))
+        else:
+            # 计算period周期的MA
+            result.append(sum(prices[i-period+1:i+1]) / period)
+
+    return result
+
+
 def calculate_macd(
     close_prices: list[float],
     fast_period: int = 12,

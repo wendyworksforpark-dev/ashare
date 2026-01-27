@@ -472,12 +472,11 @@ class SimulatedService:
     def _get_current_price(self, ticker: str) -> Optional[float]:
         """获取股票当前价格（最近收盘价）"""
         # 使用 KlineRepository 查询最新日线
-        klines = self.kline_repo.find_by_symbol_and_timeframe(
+        klines = self.kline_repo.find_by_symbol(
             symbol_code=ticker,
             symbol_type=SymbolType.STOCK,
             timeframe=KlineTimeframe.DAY,
-            limit=1,
-            order_desc=True
+            limit=1
         )
         return klines[0].close if klines else None
 
@@ -503,5 +502,12 @@ def get_simulated_service() -> SimulatedService:
     """获取模拟交易服务单例"""
     global _service
     if _service is None:
-        _service = SimulatedService()
+        from src.database import SessionLocal
+        from src.repositories.kline_repository import KlineRepository
+        from src.repositories.symbol_repository import SymbolRepository
+
+        session = SessionLocal()
+        kline_repo = KlineRepository(session)
+        symbol_repo = SymbolRepository(session)
+        _service = SimulatedService(kline_repo, symbol_repo)
     return _service

@@ -249,3 +249,36 @@ async def get_momentum_signals():
             status_code=500,
             detail=f"读取动量信号失败: {str(e)}"
         )
+
+
+@router.post("/momentum-signals/refresh")
+async def refresh_momentum_signals():
+    """
+    强制刷新动量信号数据
+    触发后台更新脚本运行一次
+    """
+    try:
+        import subprocess
+        import os
+
+        # 获取项目根目录
+        project_root = Path(__file__).parent.parent.parent
+
+        # 运行更新脚本
+        subprocess.Popen(
+            ["python", str(project_root / "scripts" / "force_update_monitor.py")],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            cwd=str(project_root)
+        )
+
+        return {
+            "success": True,
+            "message": "后台更新已触发，请等待5-10秒后刷新页面查看新数据"
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"触发刷新失败: {str(e)}"
+        )

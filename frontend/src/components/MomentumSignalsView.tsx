@@ -48,6 +48,7 @@ const fetchMomentumSignals = async (): Promise<MomentumSignalsResponse> => {
 
 export function MomentumSignalsView() {
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [isForceRefreshing, setIsForceRefreshing] = useState(false);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["momentumSignals"],
@@ -55,6 +56,32 @@ export function MomentumSignalsView() {
     refetchInterval: autoRefresh ? 60000 : false, // 60 seconds
     staleTime: 30000,
   });
+
+  const handleForceRefresh = async () => {
+    try {
+      setIsForceRefreshing(true);
+
+      // 调用后端强制刷新API
+      const url = buildApiUrl("/api/concept-monitor/momentum-signals/refresh");
+      const response = await fetch(url, { method: "POST" });
+
+      if (!response.ok) {
+        throw new Error("刷新失败");
+      }
+
+      // 等待5秒让后台更新完成，然后重新获取数据
+      setTimeout(() => {
+        refetch();
+        setIsForceRefreshing(false);
+      }, 5000);
+
+      alert("后台更新已触发，5秒后自动刷新数据");
+    } catch (error) {
+      console.error("强制刷新失败:", error);
+      alert("刷新失败，请稍后重试");
+      setIsForceRefreshing(false);
+    }
+  };
 
   const renderSignalCard = (signal: MomentumSignal, index: number) => {
     const isSurge = signal.signal_type === "surge";
@@ -178,9 +205,10 @@ export function MomentumSignalsView() {
           </label>
           <button
             className="momentum-signals-view__refresh-btn"
-            onClick={() => refetch()}
+            onClick={handleForceRefresh}
+            disabled={isForceRefreshing}
           >
-            手动刷新
+            {isForceRefreshing ? "刷新中..." : "强制刷新"}
           </button>
         </div>
       </div>
