@@ -617,3 +617,129 @@ class TushareClient:
             trade_date=trade_date,
             fields='ts_code,trade_date,total_mv,float_mv,total_share,float_share,free_share,turnover_rate,turnover_rate_f,pe,pe_ttm,pb'
         )
+
+    # ====================
+    # 财务数据接口
+    # ====================
+
+    def fetch_fina_indicator(
+        self,
+        ticker: str,
+        periods: int = 8
+    ) -> pd.DataFrame:
+        """
+        获取财务指标数据
+
+        Args:
+            ticker: 股票代码（6位，不带后缀）
+            periods: 获取最近N个季度
+
+        Returns:
+            DataFrame: 包含 ROE、净利润增长、毛利率等财务指标
+        """
+        ts_code = self.normalize_ts_code(ticker)
+        logger.debug(f"获取财务指标: ts_code={ts_code}, periods={periods}")
+
+        return self._request_with_retry(
+            self.pro.fina_indicator,
+            ts_code=ts_code,
+            fields=(
+                'ts_code,ann_date,end_date,eps,dt_eps,roe,roe_dt,roa,'
+                'grossprofit_margin,netprofit_margin,netprofit_yoy,or_yoy,'
+                'q_netprofit_yoy,q_sales_yoy,debt_to_assets,current_ratio,quick_ratio'
+            )
+        )
+
+    def fetch_income(
+        self,
+        ticker: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取利润表数据
+
+        Args:
+            ticker: 股票代码（6位，不带后缀）
+            start_date: 开始日期
+            end_date: 结束日期
+
+        Returns:
+            DataFrame: 包含营收、净利润、毛利等
+        """
+        ts_code = self.normalize_ts_code(ticker)
+        logger.debug(f"获取利润表: ts_code={ts_code}")
+
+        return self._request_with_retry(
+            self.pro.income,
+            ts_code=ts_code,
+            start_date=start_date,
+            end_date=end_date,
+            fields=(
+                'ts_code,ann_date,end_date,revenue,operate_profit,total_profit,'
+                'n_income,n_income_attr_p,basic_eps,diluted_eps'
+            )
+        )
+
+    def fetch_forecast(
+        self,
+        ticker: Optional[str] = None,
+        ann_date: Optional[str] = None,
+        period: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取业绩预告
+
+        Args:
+            ticker: 股票代码
+            ann_date: 公告日期
+            period: 报告期
+
+        Returns:
+            DataFrame: 业绩预告数据
+        """
+        ts_code = self.normalize_ts_code(ticker) if ticker else None
+        logger.debug(f"获取业绩预告: ts_code={ts_code}, period={period}")
+
+        return self._request_with_retry(
+            self.pro.forecast,
+            ts_code=ts_code,
+            ann_date=ann_date,
+            period=period,
+            fields=(
+                'ts_code,ann_date,end_date,type,p_change_min,p_change_max,'
+                'net_profit_min,net_profit_max,last_parent_net,summary'
+            )
+        )
+
+    def fetch_express(
+        self,
+        ticker: Optional[str] = None,
+        ann_date: Optional[str] = None,
+        period: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        获取业绩快报
+
+        Args:
+            ticker: 股票代码
+            ann_date: 公告日期
+            period: 报告期
+
+        Returns:
+            DataFrame: 业绩快报数据
+        """
+        ts_code = self.normalize_ts_code(ticker) if ticker else None
+        logger.debug(f"获取业绩快报: ts_code={ts_code}, period={period}")
+
+        return self._request_with_retry(
+            self.pro.express,
+            ts_code=ts_code,
+            ann_date=ann_date,
+            period=period,
+            fields=(
+                'ts_code,ann_date,end_date,revenue,operate_profit,total_profit,'
+                'n_income,total_assets,total_hldr_eqy_exc_min_int,diluted_eps,'
+                'diluted_roe,yoy_net_profit,yoy_sales,yoy_op,yoy_roe'
+            )
+        )
