@@ -26,7 +26,11 @@ from src.schemas.daily_review import (
     IndexSnapshot,
     SectorSnapshot,
     SampleStock,
-    MarketSentiment
+    MarketSentiment,
+    FundamentalAnalysis,
+    FundamentalAlert,
+    QualityStock,
+    RiskStock,
 )
 
 
@@ -62,6 +66,15 @@ class DailyReviewDataService:
         self.symbol_repo = SymbolRepository(session)
         self.pattern_analyzer = KlinePatternAnalyzer()
         self.sentiment_analyzer = MarketSentimentAnalyzer()
+        self._fundamental_analyzer = None
+
+    @property
+    def fundamental_analyzer(self):
+        """Lazy init fundamental analyzer"""
+        if self._fundamental_analyzer is None:
+            from src.utils.fundamental_analyzer import FundamentalAnalyzer
+            self._fundamental_analyzer = FundamentalAnalyzer(self.session)
+        return self._fundamental_analyzer
 
     async def collect_review_data(self, trade_date: str) -> DailyReviewSnapshot:
         """
@@ -99,13 +112,17 @@ class DailyReviewDataService:
         # 5. Representative sample stocks
         samples = await self._select_sample_stocks(trade_date, sectors, concepts)
 
+        # 6. Fundamental analysis (NEW)
+        fundamental_analysis = await self._analyze_fundamentals(trade_date, samples)
+
         return DailyReviewSnapshot(
             trade_date=trade_date,
             indices=indices,
             sectors=sectors,
             concepts=concepts,
             sentiment=sentiment,
-            sample_stocks=samples
+            sample_stocks=samples,
+            fundamental_analysis=fundamental_analysis
         )
 
     async def _collect_index_data(self, trade_date: str) -> List[IndexSnapshot]:
@@ -736,3 +753,98 @@ class DailyReviewDataService:
             ma10_break=stock_data['ma10_break'],
             ma_position=stock_data['ma_position']
         )
+
+    async def _analyze_fundamentals(
+        self,
+        trade_date: str,
+        sample_stocks: Dict[str, List[SampleStock]]
+    ) -> Optional[FundamentalAnalysis]:
+        """
+        Analyze fundamentals for sample stocks.
+
+        Args:
+            trade_date: Trade date in YYYYMMDD format
+            sample_stocks: Sample stocks grouped by sector
+
+        Returns:
+            FundamentalAnalysis object or None if analysis fails
+        """
+        try:
+            # Flatten sample stocks into list with sector info
+            stocks_to_analyze = []
+            for sector_name, stocks in sample_stocks.items():
+                for stock in stocks:
+                    # Get industry info from symbol metadata
+                    symbol_info = self.symbol_repo.find_by_ticker(stock.ticker)
+                    industry = symbol_info.industry_lv1 if symbol_info else None
+
+                    stocks_to_analyze.append({
+                        'ticker': stock.ticker,
+                        'name': stock.name,
+                        'sector': sector_name,
+                        'industry': industry,
+                        'current_price': stock.close,
+                        'change_pct': stock.change_pct,
+                    })
+
+            if not stocks_to_analyze:
+                return None
+
+            # Run fundamental analysis
+            results = self.fundamental_analyzer.batch_analyze_fundamentals(
+                stocks_to_analyze, trade_date
+            )
+
+            # Convert to schema objects
+            divergence_alerts = [
+                FundamentalAlert(
+                    ticker=a['ticker'],
+                    name=a.get('name'),
+                    sector=a.get('sector'),
+                    warning=a['warning'],
+                    divergence_level=a['divergence_level'],
+                    price_vs_52w_high=a.get('details', {}).get('price_vs_52w_high'),
+                    roe=a.get('details', {}).get('roe'),
+                    profit_yoy=a.get('details', {}).get('latest_profit_yoy'),
+                )
+                for a in results.get('divergence_alerts', [])
+            ]
+
+            quality_stocks = [
+                QualityStock(
+                    ticker=q['ticker'],
+                    name=q.get('name'),
+                    sector=q.get('sector'),
+                    industry=q['industry'],
+                    roe=q['roe'],
+                    rank=q['rank'],
+                    percentile=q['percentile'],
+                    profit_yoy=q.get('profit_yoy'),
+                )
+                for q in results.get('quality_stocks', [])
+            ]
+
+            risk_stocks = [
+                RiskStock(
+                    ticker=r['ticker'],
+                    name=r.get('name'),
+                    sector=r.get('sector'),
+                    warning=r['warning'],
+                    roe=r.get('roe'),
+                    profit_yoy=r.get('profit_yoy'),
+                )
+                for r in results.get('risk_stocks', [])
+            ]
+
+            return FundamentalAnalysis(
+                divergence_alerts=divergence_alerts,
+                quality_stocks=quality_stocks,
+                risk_stocks=risk_stocks,
+                analysis_count=len(stocks_to_analyze)
+            )
+
+        except Exception as e:
+            # Log error but don't fail the entire snapshot
+            import logging
+            logging.getLogger(__name__).warning(f"Fundamental analysis failed: {e}")
+            return None
