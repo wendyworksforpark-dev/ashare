@@ -55,6 +55,12 @@ class SchedulerManager:
         except Exception as e:
             LOGGER.error(f"Failed to update industry data: {e}")
 
+        LOGGER.info("Updating concept daily data...")
+        try:
+            self._update_concept_data()
+        except Exception as e:
+            LOGGER.error(f"Failed to update concept data: {e}")
+
         LOGGER.info("Updating ETF kline and flow data...")
         try:
             self._update_etf_data()
@@ -72,6 +78,22 @@ class SchedulerManager:
                 LOGGER.info("Industry update completed successfully")
         except Exception as e:
             LOGGER.error(f"Industry update exception: {e}", exc_info=True)
+
+    def _update_concept_data(self) -> None:
+        """Update concept daily data (AKShare - runs in background)"""
+        try:
+            import subprocess
+            from pathlib import Path
+            script_path = Path(__file__).parent.parent.parent / "scripts" / "update_concept_daily.py"
+            log_path = Path(__file__).parent.parent.parent / "logs" / "concept_daily.log"
+            log_path.parent.mkdir(exist_ok=True)
+            
+            # Run in background since it takes ~6 minutes
+            cmd = f'nohup python {script_path} > {log_path} 2>&1 &'
+            subprocess.Popen(cmd, shell=True)
+            LOGGER.info("Concept daily update started in background")
+        except Exception as e:
+            LOGGER.error(f"Concept daily update exception: {e}", exc_info=True)
 
     def _update_etf_data(self) -> None:
         """Update ETF kline and flow data"""

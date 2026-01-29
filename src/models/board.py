@@ -108,6 +108,18 @@ class ConceptDaily(Base):
     up_count: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 上涨家数
     down_count: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 下跌家数
 
+    # 资金流向
+    net_inflow: Mapped[float | None] = mapped_column(Float, nullable=True)  # 资金净流入(亿)
+
+    # 排名
+    rank: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 涨幅排名
+    total_boards: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 板块总数
+
+    # OHLC
+    open: Mapped[float | None] = mapped_column(Float, nullable=True)  # 今开
+    high: Mapped[float | None] = mapped_column(Float, nullable=True)  # 最高
+    low: Mapped[float | None] = mapped_column(Float, nullable=True)  # 最低
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )
