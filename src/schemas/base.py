@@ -17,7 +17,7 @@ class SymbolMeta(BaseModel):
     industry_lv1: Optional[str] = Field(default=None, serialization_alias="industryLv1")
     industry_lv2: Optional[str] = Field(default=None, serialization_alias="industryLv2")
     industry_lv3: Optional[str] = Field(default=None, serialization_alias="industryLv3")
-    super_category: Optional[str] = Field(default=None, serialization_alias="superCategory")  # 超级行业组
+    sector: Optional[str] = Field(default=None, serialization_alias="sector")  # 赛道分类
     concepts: List[str] = Field(default_factory=list, serialization_alias="concepts")  # 概念板块列表
 
     # Company information

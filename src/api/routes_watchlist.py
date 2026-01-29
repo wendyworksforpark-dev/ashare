@@ -39,7 +39,7 @@ class WatchlistItemResponse(BaseModel):
     pe_ttm: float | None = Field(default=None, serialization_alias="peTtm")
     pb: float | None = Field(default=None, serialization_alias="pb")
     industry_lv1: str | None = Field(default=None, serialization_alias="industryLv1")
-    super_category: str | None = Field(default=None, serialization_alias="superCategory")
+    sector: str | None = Field(default=None, description="赛道分类")
     concepts: list[str] = []
 
     class Config:
@@ -87,7 +87,7 @@ def get_watchlist():
                 pe_ttm=symbol.pe_ttm,
                 pb=symbol.pb,
                 industry_lv1=symbol.industry_lv1,
-                super_category=symbol.super_category,
+                sector=item.category or "未分类",  # 使用 watchlist.category 作为赛道
                 concepts=symbol.concepts or []
             ))
 
@@ -400,7 +400,7 @@ def get_watchlist_analytics():
                 "ticker": item.ticker,
                 "name": symbol.name,
                 "industry": symbol.industry_lv1,
-                "super_category": symbol.super_category,
+                "sector": item.category or "未分类",  # 使用赛道分类
                 "purchase_price": purchase_price,
                 "current_price": current_price,
                 "shares": shares,

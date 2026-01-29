@@ -24,7 +24,6 @@ from src.models.board import (
     BoardMapping,
     ConceptDaily,
     IndustryDaily,
-    SuperCategoryDaily,
 )
 from src.models.kline import DataUpdateLog, Kline
 from src.models.simulated import SimulatedAccount, SimulatedPosition, SimulatedTrade
@@ -51,7 +50,6 @@ __all__ = [
     "BoardMapping",
     "IndustryDaily",
     "ConceptDaily",
-    "SuperCategoryDaily",
     # Calendar
     "TradeCalendar",
     # User models

@@ -116,40 +116,4 @@ class ConceptDaily(Base):
     )
 
 
-class SuperCategoryDaily(Base):
-    """超级行业组每日数据表 - 存储14个超级行业组的每日市值和涨跌幅"""
-
-    __tablename__ = "super_category_daily"
-    __table_args__ = (
-        UniqueConstraint("super_category_name", "trade_date"),
-        Index("ix_super_category_trade_date", "trade_date"),
-        Index("ix_super_category_name", "super_category_name"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    super_category_name: Mapped[str] = mapped_column(String(64), index=True)  # 超级行业组名称
-    score: Mapped[int] = mapped_column(Integer)  # 进攻性评分 (10-95)
-    trade_date: Mapped[str] = mapped_column(String(8), index=True)  # 交易日期 YYYYMMDD
-
-    # 市值数据
-    total_mv: Mapped[float] = mapped_column(Float)  # 总市值（万元）
-    pct_change: Mapped[float | None] = mapped_column(Float, nullable=True)  # 涨跌幅（相比前一交易日）
-
-    # 成分行业统计
-    industry_count: Mapped[int] = mapped_column(Integer)  # 行业总数
-    up_count: Mapped[int] = mapped_column(Integer, default=0)  # 上涨行业数
-    down_count: Mapped[int] = mapped_column(Integer, default=0)  # 下跌行业数
-
-    # 可选统计指标
-    avg_pe: Mapped[float | None] = mapped_column(Float, nullable=True)  # 平均PE
-    leading_industry: Mapped[str | None] = mapped_column(String(64), nullable=True)  # 涨幅最大的行业
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow
-    )
-
-
-__all__ = ["BoardMapping", "IndustryDaily", "ConceptDaily", "SuperCategoryDaily"]
+__all__ = ["BoardMapping", "IndustryDaily", "ConceptDaily"]

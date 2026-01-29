@@ -121,23 +121,6 @@ class LatestScreenshotResponse(BaseModel):
 
 # ============ 板块相关响应 ============
 
-class SuperCategoryItem(BaseModel):
-    """超级行业组项目"""
-    name: str = Field(..., description="超级行业组名称")
-    count: int = Field(..., description="股票数量")
-    market_value: float = Field(..., description="总市值(万元)")
-
-    model_config = {"from_attributes": True}
-
-
-class SuperCategoriesResponse(BaseModel):
-    """超级行业组列表响应"""
-    categories: List[SuperCategoryItem] = Field(..., description="超级行业组列表")
-    total: int = Field(..., description="总数")
-
-    model_config = {"from_attributes": True}
-
-
 class BoardStockItem(BaseModel):
     """板块股票项目"""
     ticker: str = Field(..., description="股票代码")

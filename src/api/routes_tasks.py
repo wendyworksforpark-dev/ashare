@@ -96,9 +96,6 @@ def _run_full_refresh(
         update(progress=10, message="更新行业数据")
         _run_script("update_industry_daily.py")
 
-        update(progress=80, message="更新超级行业数据")
-        _run_script("update_super_category_daily.py")
-
         update(progress=82, message="更新ETF日度汇总")
         _run_script("update_etf_daily_summary.py")
 

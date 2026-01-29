@@ -55,12 +55,6 @@ class SchedulerManager:
         except Exception as e:
             LOGGER.error(f"Failed to update industry data: {e}")
 
-        LOGGER.info("Updating super category daily data...")
-        try:
-            self._update_super_category_data()
-        except Exception as e:
-            LOGGER.error(f"Failed to update super category data: {e}")
-
         LOGGER.info("Updating ETF kline and flow data...")
         try:
             self._update_etf_data()
@@ -78,15 +72,6 @@ class SchedulerManager:
                 LOGGER.info("Industry update completed successfully")
         except Exception as e:
             LOGGER.error(f"Industry update exception: {e}", exc_info=True)
-
-    def _update_super_category_data(self) -> None:
-        """Update super category daily data"""
-        try:
-            from scripts.update_super_category_daily import update_super_category_daily
-            update_super_category_daily()
-            LOGGER.info("Super category update completed successfully")
-        except Exception as e:
-            LOGGER.error(f"Super category update exception: {e}", exc_info=True)
 
     def _update_etf_data(self) -> None:
         """Update ETF kline and flow data"""
