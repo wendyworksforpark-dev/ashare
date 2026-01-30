@@ -134,9 +134,11 @@ interface Props {
   tsCode?: string;
   maConfig: MAConfig;
   onMAConfigChange: (config: MAConfig) => void;
+  /** Hide the indicator tables (成交/价格/涨跌) below the chart */
+  hideIndicators?: boolean;
 }
 
-export function IndexChart({ tsCode = "000001.SH", maConfig }: Props) {
+export function IndexChart({ tsCode = "000001.SH", maConfig, hideIndicators = false }: Props) {
   const [lastUpdate, setLastUpdate] = useState<string>("");
 
   // 获取实时数据（收盘后停止轮询）
@@ -373,7 +375,7 @@ export function IndexChart({ tsCode = "000001.SH", maConfig }: Props) {
       </div>
 
       {/* 指标数据区域（放在K线下方） */}
-      {quoteData && (
+      {quoteData && !hideIndicators && (
         <div className="index-chart__indicators">
           <div className="index-chart__indicator-group">
             <h4 className="index-chart__group-title">成交数据</h4>
