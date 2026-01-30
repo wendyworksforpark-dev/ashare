@@ -23,10 +23,12 @@ def register_startup_shutdown(app: FastAPI) -> None:
             _scheduler_manager = SchedulerManager()
             _scheduler_manager.start()
 
-            # 启动K线数据调度器
-            LOGGER.info("Starting K-line data scheduler...")
-            kline_scheduler = get_scheduler()
-            kline_scheduler.start()
+            # K线数据调度器 — 暂时禁用启动预加载
+            # 原因: 348只股票 × 新浪3秒限流 = 17分钟阻塞，导致API不可用
+            # TODO: 改为懒加载 + 指数退避 + 增量更新
+            LOGGER.info("K-line scheduler DISABLED (Sina rate limit issue)")
+            # kline_scheduler = get_scheduler()
+            # kline_scheduler.start()
 
     @app.on_event("shutdown")
     async def _shutdown() -> None:
