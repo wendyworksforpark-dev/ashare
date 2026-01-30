@@ -34,8 +34,8 @@ class StockUpdater:
         return [t[0] for t in tickers]
 
     async def update_watchlist_daily(self) -> int:
-        """更新自选股日线数据 (东方财富)"""
-        from src.services.eastmoney_kline_provider import EastMoneyKlineProvider
+        """更新自选股日线数据 (新浪财经)"""
+        from src.services.sina_kline_provider import SinaKlineProvider
 
         logger.info("开始更新自选股日线数据...")
         total_updated = 0
@@ -47,7 +47,7 @@ class StockUpdater:
             return 0
 
         logger.info(f"共 {len(tickers)} 只自选股需要更新")
-        provider = EastMoneyKlineProvider(delay=0.1)
+        provider = SinaKlineProvider(delay=0.1)
         kline_service = KlineService(self.kline_repo, self.symbol_repo)
 
         for i, ticker in enumerate(tickers):
@@ -151,13 +151,13 @@ class StockUpdater:
 
     async def update_all_daily(self) -> int:
         """
-        更新全市场股票日线数据 (东方财富)
+        更新全市场股票日线数据 (新浪财经)
 
         每只股票只获取最近20条日线，用于每日增量更新
         预计耗时: 5450只 × 0.1秒 ≈ 9分钟
         """
         from src.models import SymbolMetadata
-        from src.services.eastmoney_kline_provider import EastMoneyKlineProvider
+        from src.services.sina_kline_provider import SinaKlineProvider
 
         logger.info("=" * 50)
         logger.info("开始更新全市场股票日线数据...")
@@ -165,7 +165,7 @@ class StockUpdater:
         total_updated = 0
         success_count = 0
         fail_count = 0
-        provider = EastMoneyKlineProvider(delay=0.1)
+        provider = SinaKlineProvider(delay=0.1)
         kline_service = KlineService(self.kline_repo, self.symbol_repo)
 
         try:
@@ -246,7 +246,6 @@ class StockUpdater:
         Returns:
             {"daily": 条数, "mins30": 条数}
         """
-        from src.services.eastmoney_kline_provider import EastMoneyKlineProvider
         from src.services.sina_kline_provider import SinaKlineProvider
 
         result = {"daily": 0, "mins30": 0}
@@ -255,10 +254,10 @@ class StockUpdater:
         # 复用同一个 service 实例
         service = KlineService(self.kline_repo, self.symbol_repo)
 
-        # 1. 更新日线 (东方财富)
+        # 1. 更新日线 (新浪财经)
         try:
-            eastmoney = EastMoneyKlineProvider()
-            daily_df = eastmoney.fetch_kline(ticker, period="day", limit=120)
+            sina_daily = SinaKlineProvider(delay=0.1)
+            daily_df = sina_daily.fetch_kline(ticker, period="day", limit=120)
 
             if daily_df is not None and not daily_df.empty:
                 if 'timestamp' in daily_df.columns:

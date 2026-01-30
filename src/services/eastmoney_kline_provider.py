@@ -1,5 +1,5 @@
 """
-新浪财经K线数据提供者
+东方财富K线数据提供者
 用于获取分钟级K线数据
 """
 import time
@@ -12,35 +12,36 @@ import pandas as pd
 LOGGER = logging.getLogger(__name__)
 
 
-class SinaKlineProvider:
-    """新浪财经K线数据提供者"""
+class EastMoneyKlineProvider:
+    """东方财富K线数据提供者"""
 
-    BASE_URL = "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"
-
-    # 周期映射
+    # 周期映射 (东方财富的klt参数)
     PERIOD_MAP = {
+        "1m": 1,
         "5m": 5,
         "15m": 15,
         "30m": 30,
         "60m": 60,
-        "day": 240,
+        "day": 101,
+        "week": 102,
+        "month": 103,
     }
 
-    def __init__(self, delay: float = 3.0):
+    def __init__(self, delay: float = 0.1):
         """
         初始化
 
         Args:
-            delay: 请求间隔（秒），默认3秒（保守策略）
+            delay: 请求间隔（秒），默认0.1秒
         """
         self.delay = delay
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Referer': 'https://finance.sina.com.cn/'
+            'Referer': 'https://quote.eastmoney.com/'
         })
         self._last_request_time = 0
-        LOGGER.info(f"SinaKlineProvider 初始化，请求间隔: {delay}秒")
+        LOGGER.info(f"EastMoneyKlineProvider 初始化，请求间隔: {delay}秒")
 
     def _wait_for_rate_limit(self):
         """等待以满足频率限制"""
@@ -52,20 +53,27 @@ class SinaKlineProvider:
 
     def _convert_ticker(self, ticker: str) -> str:
         """
-        转换股票代码为新浪格式
+        转换股票代码为东方财富格式
 
         Args:
             ticker: 6位股票代码 (如 000001)
 
         Returns:
-            新浪格式代码 (如 sz000001)
+            东方财富格式: 1.000001 (深圳) 或 0.600000 (上海)
         """
         if ticker.startswith('6'):
-            return f'sh{ticker}'
+            return f'1.{ticker}'  # 上海
         elif ticker.startswith('0') or ticker.startswith('3'):
-            return f'sz{ticker}'
+            return f'0.{ticker}'  # 深圳
         else:
-            return ticker
+            return f'0.{ticker}'
+
+    def _get_secid(self, ticker: str) -> str:
+        """获取东方财富的secid"""
+        if ticker.startswith('6'):
+            return f'1.{ticker}'
+        else:
+            return f'0.{ticker}'
 
     def fetch_kline(
         self,
@@ -78,8 +86,8 @@ class SinaKlineProvider:
 
         Args:
             ticker: 6位股票代码
-            period: 周期 (5m, 15m, 30m, 60m)
-            limit: 获取数量，最大1023
+            period: 周期 (1m, 5m, 15m, 30m, 60m, day, week, month)
+            limit: 获取数量
 
         Returns:
             DataFrame with columns: timestamp, open, high, low, close, volume
@@ -88,49 +96,54 @@ class SinaKlineProvider:
             LOGGER.error(f"不支持的周期: {period}")
             return None
 
-        scale = self.PERIOD_MAP[period]
-        symbol = self._convert_ticker(ticker)
+        klt = self.PERIOD_MAP[period]
+        secid = self._get_secid(ticker)
 
         self._wait_for_rate_limit()
 
         try:
+            url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
             params = {
-                'symbol': symbol,
-                'scale': scale,
-                'ma': 'no',
-                'datalen': min(limit, 1023)
+                'secid': secid,
+                'fields1': 'f1,f2,f3,f4,f5,f6',
+                'fields2': 'f51,f52,f53,f54,f55,f56,f57',
+                'klt': klt,
+                'fqt': 1,  # 前复权
+                'end': '20500101',
+                'lmt': limit,
             }
 
-            response = self.session.get(self.BASE_URL, params=params, timeout=10)
+            response = self.session.get(url, params=params, timeout=10)
             response.raise_for_status()
 
-            # 解析JSON响应
             data = response.json()
 
-            if not data:
+            if data.get('data') is None or data['data'].get('klines') is None:
                 LOGGER.debug(f"{ticker} 无数据返回")
                 return None
 
-            # 转换为DataFrame
-            df = pd.DataFrame(data)
+            klines = data['data']['klines']
 
-            # 重命名列
-            df = df.rename(columns={
-                'day': 'timestamp',
-                'open': 'open',
-                'high': 'high',
-                'low': 'low',
-                'close': 'close',
-                'volume': 'volume'
-            })
+            if not klines:
+                return None
 
-            # 转换数据类型
+            # 解析K线数据
+            # 格式: "2024-01-02 10:00,10.50,10.80,10.30,10.60,123456,1234567.00"
+            records = []
+            for line in klines:
+                parts = line.split(',')
+                if len(parts) >= 6:
+                    records.append({
+                        'timestamp': parts[0],
+                        'open': float(parts[1]),
+                        'close': float(parts[2]),
+                        'high': float(parts[3]),
+                        'low': float(parts[4]),
+                        'volume': int(float(parts[5])),
+                    })
+
+            df = pd.DataFrame(records)
             df['timestamp'] = pd.to_datetime(df['timestamp'])
-            for col in ['open', 'high', 'low', 'close']:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-            df['volume'] = pd.to_numeric(df['volume'], errors='coerce').fillna(0).astype(int)
-
-            # 添加ticker列
             df['ticker'] = ticker
 
             LOGGER.debug(f"{ticker} 获取 {len(df)} 条K线")
@@ -165,7 +178,7 @@ class SinaKlineProvider:
         all_data = []
         total = len(tickers)
 
-        LOGGER.info(f"开始批量获取 {total} 只股票的 {period} K线")
+        LOGGER.info(f"开始批量获取 {total} 只股票的 {period} K线 (东方财富)")
 
         for i, ticker in enumerate(tickers):
             df = self.fetch_kline(ticker, period, limit)

@@ -156,20 +156,15 @@ def _fetch_and_save_klines(
     Returns:
         保存的记录数
     """
-    from src.services.eastmoney_kline_provider import EastMoneyKlineProvider
     from src.services.sina_kline_provider import SinaKlineProvider
 
     logger.info(f"懒加载: 获取 {ticker} {timeframe} K线数据...")
 
     try:
-        if timeframe == "day":
-            # 日线用东方财富
-            provider = EastMoneyKlineProvider(delay=0.1)  # 单次请求，不需要太长延迟
-            df = provider.fetch_kline(ticker, period="day", limit=limit)
-        else:
-            # 30分钟用新浪
-            provider = SinaKlineProvider(delay=0.1)
-            df = provider.fetch_kline(ticker, period="30m", limit=limit)
+        # 日线和30分钟都用新浪（东方财富已被限流）
+        provider = SinaKlineProvider(delay=0.1)
+        period = "day" if timeframe == "day" else "30m"
+        df = provider.fetch_kline(ticker, period=period, limit=limit)
 
         if df is None or df.empty:
             logger.warning(f"懒加载: {ticker} {timeframe} 无数据返回")
