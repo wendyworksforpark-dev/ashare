@@ -161,10 +161,21 @@ def _fetch_and_save_klines(
     logger.info(f"懒加载: 获取 {ticker} {timeframe} K线数据...")
 
     try:
-        # 日线和30分钟都用新浪（东方财富已被限流）
-        provider = SinaKlineProvider(delay=0.1)
-        period = "day" if timeframe == "day" else "30m"
-        df = provider.fetch_kline(ticker, period=period, limit=limit)
+        if timeframe == "day":
+            # 日线用 Tushare Pro
+            from src.services.tushare_data_provider import TushareDataProvider
+            from src.models import Timeframe as TF
+            provider = TushareDataProvider()
+            ts_df = provider.fetch_candles(ticker, TF.DAY, limit)
+            # TushareDataProvider returns timestamp,open,high,low,close,volume,turnover
+            if ts_df is not None and not ts_df.empty:
+                df = ts_df.rename(columns={"timestamp": "timestamp"})
+            else:
+                df = None
+        else:
+            # 30分钟用新浪
+            provider = SinaKlineProvider(delay=0.1)
+            df = provider.fetch_kline(ticker, period="30m", limit=limit)
 
         if df is None or df.empty:
             logger.warning(f"懒加载: {ticker} {timeframe} 无数据返回")

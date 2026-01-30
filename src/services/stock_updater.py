@@ -34,8 +34,9 @@ class StockUpdater:
         return [t[0] for t in tickers]
 
     async def update_watchlist_daily(self) -> int:
-        """更新自选股日线数据 (新浪财经)"""
-        from src.services.sina_kline_provider import SinaKlineProvider
+        """更新自选股日线数据 (Tushare Pro)"""
+        from src.services.tushare_data_provider import TushareDataProvider
+        from src.models import Timeframe as TF
 
         logger.info("开始更新自选股日线数据...")
         total_updated = 0
@@ -47,12 +48,12 @@ class StockUpdater:
             return 0
 
         logger.info(f"共 {len(tickers)} 只自选股需要更新")
-        provider = SinaKlineProvider(delay=0.1)
+        ts_provider = TushareDataProvider()
         kline_service = KlineService(self.kline_repo, self.symbol_repo)
 
         for i, ticker in enumerate(tickers):
             try:
-                df = provider.fetch_kline(ticker, period="day", limit=120)
+                df = ts_provider.fetch_candles(ticker, TF.DAY, 120)
                 if df is None or df.empty:
                     logger.debug(f"{ticker} 无日线数据")
                     continue
@@ -157,7 +158,8 @@ class StockUpdater:
         预计耗时: 5450只 × 0.1秒 ≈ 9分钟
         """
         from src.models import SymbolMetadata
-        from src.services.sina_kline_provider import SinaKlineProvider
+        from src.services.tushare_data_provider import TushareDataProvider
+        from src.models import Timeframe as TF
 
         logger.info("=" * 50)
         logger.info("开始更新全市场股票日线数据...")
@@ -165,7 +167,7 @@ class StockUpdater:
         total_updated = 0
         success_count = 0
         fail_count = 0
-        provider = SinaKlineProvider(delay=0.1)
+        provider = TushareDataProvider()
         kline_service = KlineService(self.kline_repo, self.symbol_repo)
 
         try:
@@ -178,7 +180,7 @@ class StockUpdater:
 
             for i, ticker in enumerate(tickers):
                 try:
-                    df = provider.fetch_kline(ticker, period="day", limit=20)
+                    df = provider.fetch_candles(ticker, TF.DAY, 20)
                     if df is None or df.empty:
                         fail_count += 1
                         continue
@@ -247,6 +249,8 @@ class StockUpdater:
             {"daily": 条数, "mins30": 条数}
         """
         from src.services.sina_kline_provider import SinaKlineProvider
+        from src.services.tushare_data_provider import TushareDataProvider
+        from src.models import Timeframe as TF
 
         result = {"daily": 0, "mins30": 0}
         logger.info(f"开始更新单股 {ticker} 的K线数据...")
@@ -254,10 +258,10 @@ class StockUpdater:
         # 复用同一个 service 实例
         service = KlineService(self.kline_repo, self.symbol_repo)
 
-        # 1. 更新日线 (新浪财经)
+        # 1. 更新日线 (Tushare Pro)
         try:
-            sina_daily = SinaKlineProvider(delay=0.1)
-            daily_df = sina_daily.fetch_kline(ticker, period="day", limit=120)
+            ts_provider = TushareDataProvider()
+            daily_df = ts_provider.fetch_candles(ticker, TF.DAY, 120)
 
             if daily_df is not None and not daily_df.empty:
                 if 'timestamp' in daily_df.columns:
