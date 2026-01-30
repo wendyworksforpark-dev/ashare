@@ -48,10 +48,7 @@ class ConceptListResponse(BaseModel):
 def read_cache_file():
     """读取缓存的JSON文件"""
     if not CACHE_FILE.exists():
-        raise HTTPException(
-            status_code=503,
-            detail="数据未就绪，请先运行监控脚本: python3 scripts/monitor_no_flask.py --once"
-        )
+        return {"success": True, "timestamp": "", "total": 0, "data": []}
 
     try:
         with open(CACHE_FILE, 'r', encoding='utf-8') as f:
